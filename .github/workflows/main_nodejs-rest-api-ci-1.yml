@@ -66,4 +66,3 @@ jobs:
         run: |
           cd /home/site/wwwroot
           npm install
-          pm2 start /home/site/wwwroot/server.js --no-daemon
