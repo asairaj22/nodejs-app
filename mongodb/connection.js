@@ -1,5 +1,5 @@
-import { MongoClient } from 'mongodb';
-import dotenv from 'dotenv';
+const { MongoClient } = require('mongodb');
+const dotenv = require('dotenv');
 
 dotenv.config();
 
@@ -12,7 +12,7 @@ const client = new MongoClient(connectionString, {
 
 var _cluster;
 
-export default {
+module.exports = {
     getDatabase: (databaseName) => {
         let database = _cluster.db(databaseName);
         console.log(`Connected to database ${databaseName}`);
@@ -30,7 +30,8 @@ export default {
             console.error('Failed to connect to cluster', error);
         }
     }
-}
+};
+
 
 
 // import { MongoClient } from 'mongodb';
