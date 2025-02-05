@@ -1,11 +1,9 @@
 const { MongoClient } = require('mongodb');
-// const dotenv = require('dotenv');
+const dotenv = require('dotenv');
 
-// dotenv.config();
+dotenv.config();
 
-const connectionString = 'mongodb+srv://basic:Rithu22091990@mongo-cluster-rest.mongocluster.cosmos.azure.com/?tls=true&authMechanism=SCRAM-SHA-256&retrywrites=false&maxIdleTimeMS=120000';
-
-// const connectionString = process.env.CONNECTION_STRING;
+const connectionString = process.env.CONNECTION_STRING;
 console.log('Connection String:', connectionString);
 
 const client = new MongoClient(connectionString, {
