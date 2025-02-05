@@ -4,6 +4,7 @@ const dotenv = require('dotenv');
 dotenv.config();
 
 const connectionString = process.env.CONNECTION_STRING;
+console.log('Connection String:', connectionString);
 
 const client = new MongoClient(connectionString, {
     useNewUrlParser: true,
@@ -31,6 +32,7 @@ module.exports = {
         }
     }
 };
+
 
 
 
