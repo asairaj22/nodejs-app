@@ -1,6 +1,6 @@
-import express from 'express';
-import mongoClient from './mongodb/connection.js';
-import cors from 'cors';
+const express = require('express');
+const mongoClient = require('./mongodb/connection.js');
+const cors = require('cors');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -34,6 +34,7 @@ mongoClient.connectToCluster(() => {
     console.log(`Server is running on port ${port}`);
   });
 });
+
 
 
 // const express = require('express');
