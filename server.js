@@ -6,6 +6,14 @@ const { ObjectId } = require('mongodb');
 const app = express();
 const port = process.env.PORT || 3000;
 
+const { QueueServiceClient } = require("@azure/storage-queue");
+const connectionString = "DefaultEndpointsProtocol=https;AccountName=reactcrudproject;AccountKey=PFsewhzmMPN3KAopcGimBeDLHtKDXxO13g+PpRjHp9UBUUujSm8HSkb6Tscog4/Q363yCrA92/Nh+AStVgay4w==;EndpointSuffix=core.windows.net";
+const queueName = "message-queue";
+
+const queueServiceClient = QueueServiceClient.fromConnectionString(connectionString);
+const queueClient = queueServiceClient.getQueueClient(queueName);
+
+
 // Use CORS middleware
 app.use(cors());
 app.use(express.json());
@@ -40,6 +48,15 @@ mongoClient.connectToCluster(() => {
       const collection = getDatabaseCollection();
       const newData = { price, quantity, item, date: new Date().toISOString() };
       const result = await collection.insertOne(newData);
+      // Send a message to the queue
+      try {
+        const message = JSON.stringify({ action: 'addData', data: newData,  timestamp: new Date().toISOString() });
+        await queueClient.sendMessage(Buffer.from(message).toString('base64'));
+        console.log('Message sent to queue');
+      } catch (error) {
+        console.error('Error sending message to queue:', error);
+      }
+
       return { status: 201, data: result.ops ? result.ops[0] : newData };
     }, res);
   });
@@ -51,6 +68,7 @@ mongoClient.connectToCluster(() => {
       return { status: 200, data };
     }, res);
   });
+  
 
   app.delete('/deleteData/:id', (req, res) => {
     handleDatabaseOperation(async () => {
@@ -62,6 +80,14 @@ mongoClient.connectToCluster(() => {
       const result = await collection.deleteOne({ _id: new ObjectId(id) });
       if (result.deletedCount === 0) {
         return { status: 404, data: { errorMessage: 'No document found with the given ID' } };
+      }
+      // Send a message to the queue
+      try {
+        const message = JSON.stringify({ action: 'deleteData', id, timestamp: new Date().toISOString() });
+        await queueClient.sendMessage(Buffer.from(message).toString('base64'));
+        console.log('Message sent to queue');
+      } catch (error) {
+        console.error('Error sending message to queue:', error);
       }
       return { status: 200, data: { successMessage: 'Document deleted successfully' } };
     }, res);
@@ -80,6 +106,14 @@ mongoClient.connectToCluster(() => {
         return { status: 404, data: { errorMessage: 'Document not found' } };
       }
       const updatedDocument = await collection.findOne({ _id: new ObjectId(id) });
+      // Send a message to the queue
+      try {
+        const message = JSON.stringify({ action: 'updateData', data: updatedDocument,  timestamp: new Date().toISOString() });
+        await queueClient.sendMessage(Buffer.from(message).toString('base64'));
+        console.log('Message sent to queue');
+      } catch (error) {
+        console.error('Error sending message to queue:', error);
+      }
       return { status: 200, data: updatedDocument };
     }, res);
   });
