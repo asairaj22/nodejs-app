@@ -13,11 +13,11 @@ app.use(cors());
 app.use(express.json());
 
 // Define Function Queue
-const connectionString = "DefaultEndpointsProtocol=https;AccountName=reactcrudproject;AccountKey=PFsewhzmMPN3KAopcGimBeDLHtKDXxO13g+PpRjHp9UBUUujSm8HSkb6Tscog4/Q363yCrA92/Nh+AStVgay4w==;EndpointSuffix=core.windows.net";
-const queueName = "message-queue";
+const storageQueueConnectionString = process.env.STORAGE_QUEUE_CONNECTION_STRING;
+const storageQueueName = process.env.STORAGE_QUEUE_NAME;
 
-const queueServiceClient = QueueServiceClient.fromConnectionString(connectionString);
-const queueClient = queueServiceClient.getQueueClient(queueName);
+const storageQueueServiceClient = QueueServiceClient.fromConnectionString(storageQueueConnectionString);
+const storageQueueClient = storageQueueServiceClient.getQueueClient(storageQueueName);
 
 // Define DB Connection
 const getDatabaseCollection = () => {
@@ -62,13 +62,10 @@ mongoClient.connectToCluster(() => {
   
       // Send a message to the queue
       try {
-        const message = {
-          body: JSON.stringify({ action: 'addData', data: newData, timestamp: new Date().toISOString() }),
-          contentType: "application/json"
-        };
-        // await queueClient.sendMessage(Buffer.from(message).toString('base64'));
+        const message = { action: 'addData', data: newData, timestamp: new Date().toISOString() };
+        await storageQueueClient.sendMessage(JSON.stringify(message));
         console.log('Message sent to queue');
-        await serviceBusSender.sendMessages(message);
+        await serviceBusSender.sendMessages({ body: message});
         console.log('Message sent to service bus queue');
       } catch (error) {
         console.error('Error sending message to queue:', error);
@@ -81,7 +78,6 @@ mongoClient.connectToCluster(() => {
   // Ensure to close the Service Bus client when your application shuts down
   process.on('SIGINT', async () => {
     await serviceBusSender.close();
-    // await servicebusSenderClient.close();
     await serviceBusReceiver.close();
     await servicebusClient.close();
     process.exit();
@@ -93,8 +89,7 @@ mongoClient.connectToCluster(() => {
       const data = await collection.find().toArray();
       return { status: 200, data };
     }, res);
-  });
-  
+  });  
 
   app.delete('/deleteData/:id', (req, res) => {
     handleDatabaseOperation(async () => {
@@ -109,8 +104,8 @@ mongoClient.connectToCluster(() => {
       }
       // Send a message to the queue
       try {
-        const message = JSON.stringify({ action: 'deleteData', id, timestamp: new Date().toISOString() });
-        await queueClient.sendMessage(Buffer.from(message).toString('base64'));
+        const message = { action: 'deleteData', id, timestamp: new Date().toISOString() };
+        await storageQueueClient.sendMessage(JSON.stringify(message));
         console.log('Message sent to queue');
       } catch (error) {
         console.error('Error sending message to queue:', error);
@@ -134,8 +129,8 @@ mongoClient.connectToCluster(() => {
       const updatedDocument = await collection.findOne({ _id: new ObjectId(id) });
       // Send a message to the queue
       try {
-        const message = JSON.stringify({ action: 'updateData', data: updatedDocument,  timestamp: new Date().toISOString() });
-        await queueClient.sendMessage(Buffer.from(message).toString('base64'));
+        const message = { action: 'updateData', data: updatedDocument,  timestamp: new Date().toISOString() };
+        await storageQueueClient.sendMessage(JSON.stringify(message));
         console.log('Message sent to queue');
       } catch (error) {
         console.error('Error sending message to queue:', error);
