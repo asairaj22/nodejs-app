@@ -1,27 +1,38 @@
 const express = require('express');
 const mongoClient = require('./mongodb/connection.js');
-const cors = require('cors');
+const { QueueServiceClient } = require("@azure/storage-queue");
+const { ServiceBusClient } = require("@azure/service-bus");
 const { ObjectId } = require('mongodb');
+const cors = require('cors');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
-const { QueueServiceClient } = require("@azure/storage-queue");
+// Use CORS middleware
+app.use(cors());
+app.use(express.json());
+
+// Define Function Queue
 const connectionString = "DefaultEndpointsProtocol=https;AccountName=reactcrudproject;AccountKey=PFsewhzmMPN3KAopcGimBeDLHtKDXxO13g+PpRjHp9UBUUujSm8HSkb6Tscog4/Q363yCrA92/Nh+AStVgay4w==;EndpointSuffix=core.windows.net";
 const queueName = "message-queue";
 
 const queueServiceClient = QueueServiceClient.fromConnectionString(connectionString);
 const queueClient = queueServiceClient.getQueueClient(queueName);
 
-
-// Use CORS middleware
-app.use(cors());
-app.use(express.json());
-
+// Define DB Connection
 const getDatabaseCollection = () => {
   const db = mongoClient.getDatabase('myDatabase'); // Replace with your database name
   return db.collection('sales'); // Replace with your collection name
 };
+
+// Define connection string for Service Bus
+const serviceBusListenConnectionString = process.env.SERVICE_BUS_CONNECTION_STRING;
+const serviceBusQueueName = process.env.SERVICE_BUS_QUEUE_NAME;
+
+// Service Bus - Client & Receiver Queue
+const servicebusClient = new ServiceBusClient(serviceBusListenConnectionString);
+const serviceBusSender = servicebusClient.createSender(serviceBusQueueName);
+const serviceBusReceiver = servicebusClient.createReceiver(serviceBusQueueName);
 
 const handleDatabaseOperation = async (operation, res) => {
   try {
@@ -48,17 +59,32 @@ mongoClient.connectToCluster(() => {
       const collection = getDatabaseCollection();
       const newData = { price, quantity, item, date: new Date().toISOString() };
       const result = await collection.insertOne(newData);
+  
       // Send a message to the queue
       try {
-        const message = JSON.stringify({ action: 'addData', data: newData,  timestamp: new Date().toISOString() });
-        await queueClient.sendMessage(Buffer.from(message).toString('base64'));
+        const message = {
+          body: JSON.stringify({ action: 'addData', data: newData, timestamp: new Date().toISOString() }),
+          contentType: "application/json"
+        };
+        // await queueClient.sendMessage(Buffer.from(message).toString('base64'));
         console.log('Message sent to queue');
+        await serviceBusSender.sendMessages(message);
+        console.log('Message sent to service bus queue');
       } catch (error) {
         console.error('Error sending message to queue:', error);
       }
-
+  
       return { status: 201, data: result.ops ? result.ops[0] : newData };
     }, res);
+  });
+  
+  // Ensure to close the Service Bus client when your application shuts down
+  process.on('SIGINT', async () => {
+    await serviceBusSender.close();
+    // await servicebusSenderClient.close();
+    await serviceBusReceiver.close();
+    await servicebusClient.close();
+    process.exit();
   });
 
   app.get('/getAllData', (req, res) => {
@@ -118,11 +144,26 @@ mongoClient.connectToCluster(() => {
     }, res);
   });
 
+  app.get('/listen', async (req, res) => {
+    try {
+      const messages = await serviceBusReceiver.receiveMessages(10, { maxWaitTimeInMs: 50 });
+  
+      const receivedMessages = messages.map(message => {
+        // Complete the message to remove it from the queue
+        serviceBusReceiver.completeMessage(message);
+        return message.body;
+      });
+  
+      res.status(200).json({ messages: receivedMessages });
+    } catch (error) {
+      console.error("Error receiving messages:", error);
+      res.status(500).json({ error: "Error receiving messages" });
+    }
+  });
+
   // Start the server
   app.listen(port, () => console.log(`Server is running on port ${port}`));
 });
-
-
 
 
 // const express = require('express');
