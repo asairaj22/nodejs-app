@@ -120,7 +120,7 @@ mongoClient.connectToCluster(() => {
       const downloadFilename = filename || 'downloaded-file.txt';
       res.download(downloadFilePath, downloadFilename, async (err) => {
         // Send a message to the queue
-        if(!err){
+        if (!err) {
           try {
             const message = { action: 'File Downloaded', id, timestamp: new Date().toISOString() };
             await storageQueueClient.sendMessage(JSON.stringify(message));
@@ -192,30 +192,79 @@ mongoClient.connectToCluster(() => {
     }, res);
   });
 
-  app.put('/updateData', (req, res) => {
+  app.put('/updateData', upload.single('reactFile'), async (req, res) => {
     handleDatabaseOperation(async () => {
-      const { id, price, quantity, item } = req.body;
+      const { id, price, quantity, item, existingDeletedFileName } = req.body;
       if (!id || !price || !quantity || !item) {
-        return { status: 400, data: { errorMessage: 'Missing required fields' } };
+        return res.status(400).json({ errorMessage: 'Missing required fields' });
       }
-      const collection = getDatabaseCollection();
-      const updatedData = { $set: { price, quantity, item, date: new Date().toISOString() } };
-      const result = await collection.updateOne({ _id: new ObjectId(id) }, updatedData);
-      if (result.matchedCount === 0) {
-        return { status: 404, data: { errorMessage: 'Document not found' } };
-      }
-      const updatedDocument = await collection.findOne({ _id: new ObjectId(id) });
-      // Send a message to the queue
+
       try {
-        const message = { action: 'updateData', data: updatedDocument, timestamp: new Date().toISOString() };
-        await storageQueueClient.sendMessage(JSON.stringify(message));
-        console.log('Message sent to queue');
-        await serviceBusSender.sendMessages({ body: message });
-        console.log('Message sent to service bus queue');
+        let fileUrl = null;
+        let filename = null;
+
+        // Check if existingDeletedFileName is present and reactFile is present
+        if (existingDeletedFileName && existingDeletedFileName !== 'null' && existingDeletedFileName !== 'undefined' && req.file) {
+          await deleteBlob(existingDeletedFileName);
+          fileUrl = await uploadFileToBlob(req.file);
+          filename = req.file.originalname;
+        }
+        // Check if existingDeletedFileName is present and reactFile is null
+        else if (existingDeletedFileName && existingDeletedFileName !== 'null' && existingDeletedFileName !== 'undefined') {
+          await deleteBlob(existingDeletedFileName);
+        }
+        // Check if existingDeletedFileName is null and reactFile is present
+        else if ((!existingDeletedFileName || existingDeletedFileName == 'null' || existingDeletedFileName == 'undefined') && req.file) {
+          fileUrl = await uploadFileToBlob(req.file);
+          filename = req.file.originalname;
+        }
+
+        const updatedData = {
+          $set: {
+            price,
+            quantity,
+            item,
+            date: new Date().toISOString()
+          }
+        };
+
+        // Conditionally add fileUrl and filename to the update object
+        if (fileUrl && filename) {
+          updatedData.$set.fileUrl = fileUrl;
+          updatedData.$set.filename = filename;
+        } else if (existingDeletedFileName && existingDeletedFileName !== 'null' && existingDeletedFileName !== 'undefined' && !filename) {
+          updatedData.$set.fileUrl = null;
+          updatedData.$set.filename = null;
+        }
+
+        const collection = getDatabaseCollection();
+        const result = await collection.updateOne({ _id: new ObjectId(id) }, updatedData);
+        if (result.matchedCount === 0) {
+          return res.status(404).json({ errorMessage: 'Document not found' });
+        }
+
+        const updatedDocument = await collection.findOne({ _id: new ObjectId(id) });
+
+        // Send a message to the queue
+        try {
+          const message = { action: 'updateData', data: updatedDocument, timestamp: new Date().toISOString() };
+          await storageQueueClient.sendMessage(JSON.stringify(message));
+          console.log('Message sent to queue');
+          await serviceBusSender.sendMessages({ body: message });
+          console.log('Message sent to service bus queue');
+        } catch (error) {
+          console.error('Error sending message to queue:', error);
+        }
+
+        // Exclude fileUrl from the response
+        const responseData = { ...updatedDocument };
+        delete responseData.fileUrl;
+
+        res.status(200).json(responseData);
       } catch (error) {
-        console.error('Error sending message to queue:', error);
+        console.error('Error updating data:', error);
+        res.status(500).json({ errorMessage: 'Error updating data' });
       }
-      return { status: 200, data: updatedDocument };
     }, res);
   });
 
