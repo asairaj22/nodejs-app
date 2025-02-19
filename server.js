@@ -145,7 +145,14 @@ mongoClient.connectToCluster(() => {
   app.get('/getAllData', (req, res) => {
     handleDatabaseOperation(async () => {
       const collection = getDatabaseCollection();
-      const data = await collection.find().toArray();
+      const result = await collection.find().toArray();
+
+      // Remove fileUrl from each document
+      const data = result.map(doc => {
+        const { fileUrl, ...rest } = doc;
+        return rest;
+      });
+
       return { status: 200, data };
     }, res);
   });

@@ -14,9 +14,14 @@ const blobServiceClient = new BlobServiceClient(
 );
 
 const uploadFileToBlob = async (file) => {
-    console.log('File Name:', file.originalname);
+    // Get the current timestamp
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    // Append the timestamp to the original filename
+    const fileNameWithTimestamp = `${file.originalname}-${timestamp}`;
+
+    console.log('File Name:', fileNameWithTimestamp);
     const containerClient = blobServiceClient.getContainerClient(containerName);
-    const blobClient = containerClient.getBlockBlobClient(file.originalname);
+    const blobClient = containerClient.getBlockBlobClient(fileNameWithTimestamp);
 
     try {
         await blobClient.uploadData(file.buffer);
@@ -27,6 +32,7 @@ const uploadFileToBlob = async (file) => {
         throw error;
     }
 };
+
 
 const downloadBlob = async (blobUrl, downloadFilePath) => {
     const blobClient = new BlobClient(blobUrl);
