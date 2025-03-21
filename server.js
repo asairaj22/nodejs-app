@@ -8,13 +8,31 @@ const cors = require('cors');
 const { uploadFileToBlob, downloadBlob, deleteBlob } = require('./azure/azureStorage.js');
 const path = require('path');
 
+const cookieHandler = require('./cookies/cookieHandler.js');
+
 const app = express();
 const upload = multer();
 const port = process.env.PORT || 3000;
 
 // Use CORS middleware
-app.use(cors());
+// app.use(cors());
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+    cors({
+      origin: origin,
+      credentials: true
+    })(req, res, next);
+});
+
 app.use(express.json());
+
+// Set Pug as the view engine
+app.set('view engine', 'pug');
+// Set the views directory
+app.set('views', path.join(__dirname, 'views'));
+
+// Use the cookieHandler routes
+app.use(cookieHandler);
 
 // Define Function Queue
 const storageQueueConnectionString = process.env.STORAGE_QUEUE_CONNECTION_STRING;
@@ -52,7 +70,10 @@ const handleDatabaseOperation = async (operation, res) => {
 mongoClient.connectToCluster(() => {
   console.log('MongoDB connection established');
 
-  app.get('/', (req, res) => res.send('NodeJS Server working !!'));
+  app.get('/', (req, res) => {
+    res.render('welcome_screen');
+    // res.send('NodeJS Server working !!');
+  });
 
   app.post('/addData', upload.single('reactFile'), async (req, res) => {
     handleDatabaseOperation(async () => {
